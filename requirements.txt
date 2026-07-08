@@ -1,0 +1,11 @@
+opencv-python>=4.8.0
+mediapipe>=0.10.0,<0.10.15
+moderngl>=5.8.0
+moderngl-window>=2.4.3
+glfw>=2.6.0
+PyGLM>=2.7.0
+numpy>=1.24.0
+pyyaml>=6.0
+loguru>=0.7.0
+pydantic>=2.4.0
+tqdm>=4.66.0
