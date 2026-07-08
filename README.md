@@ -61,3 +61,7 @@ You can interact with the on-screen buttons using:
 - **`src/effects/`**: Framebuffer objects handling Bloom processing and the Foggy Mirror shaders.
 - **`src/ui/`**: 2D Orthographic UI renderer supporting hand-hover triggers and texture-mapped buttons.
 - **`assets/shaders/`**: All the raw GLSL compute, vertex, and fragment shaders.
+
+<img width="1276" height="742" alt="Screenshot 2026-07-08 184347" src="https://github.com/user-attachments/assets/ed80ee7f-febb-4ff6-a53e-dd98278febdc" />
+<img width="1348" height="793" alt="Screenshot 2026-07-08 184535" src="https://github.com/user-attachments/assets/9ec5a797-0a5a-4bda-905c-8c5514413740" />
+
