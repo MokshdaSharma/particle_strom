@@ -78,6 +78,19 @@ class PostProcessor:
         """Binds the base FBO so the scene renders into it."""
         self.base_fbo.use()
         self.base_fbo.clear(0.05, 0.05, 0.05, 1.0)
+        
+    def draw_background(self, texture: moderngl.Texture):
+        """Draws a texture as the background into the base FBO."""
+        # Ensure we are rendering into base_fbo
+        self.base_fbo.use()
+        
+        # Bind the background texture
+        texture.use(0)
+        self.quad_prog['texture0'].value = 0
+        
+        # Disable blending to overwrite the clear color
+        self.ctx.disable(moderngl.BLEND)
+        self.quad_vao.render(moderngl.TRIANGLE_STRIP)
 
     def end(self, screen_fbo: moderngl.Framebuffer):
         """Applies blur passes and composites bloom onto the screen FBO."""

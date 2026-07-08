@@ -26,6 +26,7 @@ uniform float friction;
 uniform int num_landmarks;
 uniform bool face_detected;
 uniform float time;
+uniform int color_theme; // 0=Blue, 1=Fire, 2=Nature
 
 // simple 2D pseudo-random
 vec2 random2(vec2 st){
@@ -68,7 +69,7 @@ void main() {
     }
 
     if (face_detected && num_landmarks > 0) {
-        // Deterministic target for each particle so they distribute evenly across all 478 points
+        // Deterministic target for each particle so they distribute evenly across all points
         int target_idx = int(idx) % num_landmarks;
         vec2 target_pos = landmarks[target_idx];
         
@@ -106,7 +107,20 @@ void main() {
     // Make particles more visible when they are moving fast, but stable and clear when formed
     float speed = length(p.velocity);
     float life_fade = face_detected ? 1.0 : (1.0 - (p.age / p.lifetime));
-    p.color = vec4(0.2 + speed * 0.2, 0.5 + speed * 0.1, 1.0, life_fade);
+    
+    if (color_theme == 0) {
+        // Blue Theme
+        p.color = vec4(0.2 + speed * 0.2, 0.5 + speed * 0.1, 1.0, life_fade);
+    } else if (color_theme == 1) {
+        // Fire Theme
+        p.color = vec4(1.0, 0.4 + speed * 0.4, 0.1 + speed * 0.1, life_fade);
+    } else if (color_theme == 2) {
+        // Nature Theme
+        p.color = vec4(0.2 + speed * 0.2, 0.9, 0.3 + speed * 0.1, life_fade);
+    } else {
+        // Default Blue
+        p.color = vec4(0.2 + speed * 0.2, 0.5 + speed * 0.1, 1.0, life_fade);
+    }
 
     particles[idx] = p;
 }

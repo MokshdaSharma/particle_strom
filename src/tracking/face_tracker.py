@@ -27,10 +27,12 @@ class MotionTracker:
         self.prev_face = None 
         self.smoothed_landmarks = None
 
-    def process_frame(self, frame: np.ndarray) -> np.ndarray | None:
+    def process_frame(self, frame: np.ndarray) -> dict:
         """
-        Processes a BGR frame, extracts face landmarks, applies EMA smoothing,
-        and returns them as normalized device coordinates (NDC) [-1, 1].
+        Processes a BGR frame, extracts face and hand landmarks, applies EMA smoothing,
+        and returns them as a dictionary containing normalized device coordinates (NDC) [-1, 1].
+        Returns:
+            {'face': np.ndarray | None, 'hands': list[np.ndarray]}
         """
         # MediaPipe expects RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -58,18 +60,19 @@ class MotionTracker:
             self.prev_face = None
             
         # Process Hands
+        hand_landmarks_list = []
         if hand_results.multi_hand_landmarks:
             for hand_lms in hand_results.multi_hand_landmarks:
                 current_hand = np.zeros((21, 2), dtype=np.float32)
                 for i, lm in enumerate(hand_lms.landmark):
                     current_hand[i, 0] = (lm.x * 2.0 - 1.0) * 0.75
                     current_hand[i, 1] = 1.0 - lm.y * 2.0
-                all_landmarks.append(current_hand)
+                hand_landmarks_list.append(current_hand)
 
-        if len(all_landmarks) > 0:
-            return np.concatenate(all_landmarks, axis=0)
-            
-        return None
+        return {
+            'face': self.prev_face,
+            'hands': hand_landmarks_list
+        }
         
     def close(self):
         """Releases MediaPipe resources."""

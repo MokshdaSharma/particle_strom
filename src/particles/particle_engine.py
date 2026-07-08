@@ -77,6 +77,16 @@ class ParticleEngine:
         self.render_program['base_size'].value = self.config.base_size
         self.compute_program['attraction_speed'].value = self.config.attraction_speed
         self.compute_program['friction'].value = self.config.friction
+        
+        # Initialize color theme
+        self.current_theme = 0
+        if 'color_theme' in self.compute_program:
+            self.compute_program['color_theme'].value = self.current_theme
+
+    def set_theme(self, theme: int):
+        self.current_theme = theme
+        if 'color_theme' in self.compute_program:
+            self.compute_program['color_theme'].value = self.current_theme
 
     def update(self, dt: float, time: float, landmarks: np.ndarray | None):
         # Bind buffers to the shader
