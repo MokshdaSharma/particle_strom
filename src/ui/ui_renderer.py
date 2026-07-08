@@ -2,6 +2,7 @@ import moderngl
 import numpy as np
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
+from loguru import logger
 
 class UIRenderer:
     def __init__(self, ctx: moderngl.Context):
@@ -97,16 +98,17 @@ class UIRenderer:
             tex = self.ctx.texture(img.size, 4, img.tobytes())
             btn["texture"] = tex
 
-        # Generate cursor texture (hollow circle)
+        # Generate cursor texture (crosshair)
         cursor_img = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
         cursor_draw = ImageDraw.Draw(cursor_img)
-        # Draw a thick hollow circle
-        cursor_draw.ellipse([4, 4, 60, 60], outline=(255, 255, 255, 255), width=6)
+        # Draw crosshair lines
+        cursor_draw.line([(32, 4), (32, 60)], fill=(255, 255, 255, 255), width=4)
+        cursor_draw.line([(4, 32), (60, 32)], fill=(255, 255, 255, 255), width=4)
         # Add an inner dot
-        cursor_draw.ellipse([28, 28, 36, 36], fill=(255, 255, 255, 255))
+        cursor_draw.ellipse([28, 28, 36, 36], fill=(255, 100, 100, 255))
         self.cursor_texture = self.ctx.texture(cursor_img.size, 4, cursor_img.tobytes())
 
-    def update(self, hands_data) -> list[str]:
+    def update(self, hands_data, mouse_clicks=None) -> list[str]:
         """
         Checks if any index finger tip is hovering over a button.
         Returns a list of button IDs that were triggered this frame.
@@ -121,31 +123,40 @@ class UIRenderer:
                 
         for btn in self.buttons:
             is_hovered = False
+            
+            # Check mouse clicks first
+            if mouse_clicks:
+                for cx, cy in mouse_clicks:
+                    bx, by = btn["pos"]
+                    bw, bh = btn["size"]
+                    if (bx - bw) <= cx <= (bx + bw) and (by - bh) <= cy <= (by + bh):
+                        btn["hover_time"] = self.trigger_threshold # instant trigger
+                        is_hovered = True
+                        break
+                        
+            # Check hand pointers
             for p in self.pointers:
                 # Check AABB with slightly larger bounds for easier clicking
                 bx, by = btn["pos"]
                 bw, bh = btn["size"]
-                
-                # expand bounds slightly for forgiving interaction
                 if (bx - bw*1.5) <= p[0] <= (bx + bw*1.5) and (by - bh*2.0) <= p[1] <= (by + bh*2.0):
                     is_hovered = True
                     break
                     
             if is_hovered:
-                btn["hover_time"] += 1
-                if btn["hover_time"] == 1:
-                    from loguru import logger
+                if btn["hover_time"] == 0.0:
                     logger.debug(f"Hover started on {btn['id']}")
-                    
-                if btn["hover_time"] >= self.trigger_threshold:
-                    if not btn["triggered"]:
-                        triggered_events.append(btn["id"])
-                        btn["triggered"] = True
+                btn["hover_time"] += 1
             else:
-                # Decay hover time slowly so a dropped frame doesn't instantly reset it
-                btn["hover_time"] = max(0, btn["hover_time"] - 1)
-                if btn["hover_time"] == 0:
-                    btn["triggered"] = False
+                # slow decay instead of instant reset for jitter tolerance
+                btn["hover_time"] = max(0.0, btn["hover_time"] - 0.5)
+                
+            if btn["hover_time"] >= self.trigger_threshold:
+                if not btn["triggered"]:
+                    triggered_events.append(btn["id"])
+                    btn["triggered"] = True
+            else:
+                btn["triggered"] = False
                 
         return triggered_events
 

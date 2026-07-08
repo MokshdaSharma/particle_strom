@@ -127,3 +127,13 @@ class WetScreenRenderer:
         
         self.ctx.disable(moderngl.BLEND)
         self.foggy_vao.render(moderngl.TRIANGLE_STRIP)
+
+    def render(self, screen_fbo: moderngl.Framebuffer):
+        """Composites the strokes directly onto the screen (for dark mode)."""
+        screen_fbo.use()
+        self.texture.use(0)
+        self.quad_prog['texture0'].value = 0
+        
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.DEFAULT_BLENDING
+        self.quad_vao.render(moderngl.TRIANGLE_STRIP)

@@ -12,6 +12,7 @@ class Window:
         self.is_running = False
         self.keys = set()
         self.just_pressed = set()
+        self.mouse_clicks = []
 
     def init(self):
         """Initializes GLFW and creates a window with an OpenGL context."""
@@ -47,6 +48,7 @@ class Window:
         # Set callbacks
         glfw.set_key_callback(self.window, self._key_callback)
         glfw.set_framebuffer_size_callback(self.window, self._resize_callback)
+        glfw.set_mouse_button_callback(self.window, self._mouse_button_callback)
 
         # Create ModernGL context
         self.ctx = moderngl.create_context(require=330)
@@ -72,6 +74,20 @@ class Window:
             self.just_pressed.remove(key)
             return True
         return False
+
+    def _mouse_button_callback(self, window, button, action, mods):
+        if button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS:
+            xpos, ypos = glfw.get_cursor_pos(window)
+            width, height = glfw.get_window_size(window)
+            if width > 0 and height > 0:
+                ndc_x = (xpos / width) * 2.0 - 1.0
+                ndc_y = 1.0 - (ypos / height) * 2.0
+                self.mouse_clicks.append((ndc_x, ndc_y))
+                
+    def get_mouse_clicks(self):
+        clicks = self.mouse_clicks.copy()
+        self.mouse_clicks.clear()
+        return clicks
 
     def _resize_callback(self, window, width, height):
         """Handles window resize events."""

@@ -111,7 +111,8 @@ def main():
                     face_landmarks = tracked_data.get('face')
                     
                     # Update UI
-                    ui_events = ui_renderer.update(tracked_data.get('hands'))
+                    mouse_clicks = window.get_mouse_clicks()
+                    ui_events = ui_renderer.update(tracked_data.get('hands'), mouse_clicks)
                     for event in ui_events:
                         if event == "bg":
                             show_camera_bg = not show_camera_bg
@@ -217,6 +218,12 @@ def main():
             # Now composite particles
             post_processor.end(window.ctx.screen)
             
+            # If in dark mode, we still want to render the wet screen strokes over the particles
+            if not show_camera_bg and wet_screen_mode:
+                # We can just use the standard render() from WetScreenRenderer which uses quad_prog
+                # Let's call a render function on wet_screen if it has one.
+                wet_screen.render(window.ctx.screen)
+                
             # 4. Render UI over everything
             ui_renderer.render()
 
