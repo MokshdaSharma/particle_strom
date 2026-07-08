@@ -9,6 +9,8 @@ class UIRenderer:
         self._load_shaders()
         self._create_quad()
         
+        self.pointers = []
+        
         # Define 3 buttons: Background, Theme, WetScreen
         # coordinates are NDC: [-1, 1], max X is around 0.75 due to aspect ratio scaling in tracker
         self.buttons = [
@@ -17,7 +19,7 @@ class UIRenderer:
                 "label": "Camera",
                 "color": (0.8, 0.2, 0.2, 0.6), # Red
                 "active_color": (1.0, 0.3, 0.3, 0.9),
-                "pos": (-0.4, 0.85),
+                "pos": (-0.4, 0.75),
                 "size": (0.15, 0.08),
                 "hover_time": 0.0,
                 "triggered": False
@@ -27,7 +29,7 @@ class UIRenderer:
                 "label": "Theme",
                 "color": (0.2, 0.8, 0.2, 0.6), # Green
                 "active_color": (0.3, 1.0, 0.3, 0.9),
-                "pos": (0.0, 0.85),
+                "pos": (0.0, 0.75),
                 "size": (0.15, 0.08),
                 "hover_time": 0.0,
                 "triggered": False
@@ -37,7 +39,7 @@ class UIRenderer:
                 "label": "Draw",
                 "color": (0.2, 0.2, 0.8, 0.6), # Blue
                 "active_color": (0.3, 0.3, 1.0, 0.9),
-                "pos": (0.4, 0.85),
+                "pos": (0.4, 0.75),
                 "size": (0.15, 0.08),
                 "hover_time": 0.0,
                 "triggered": False
@@ -95,6 +97,15 @@ class UIRenderer:
             tex = self.ctx.texture(img.size, 4, img.tobytes())
             btn["texture"] = tex
 
+        # Generate cursor texture (hollow circle)
+        cursor_img = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        cursor_draw = ImageDraw.Draw(cursor_img)
+        # Draw a thick hollow circle
+        cursor_draw.ellipse([4, 4, 60, 60], outline=(255, 255, 255, 255), width=6)
+        # Add an inner dot
+        cursor_draw.ellipse([28, 28, 36, 36], fill=(255, 255, 255, 255))
+        self.cursor_texture = self.ctx.texture(cursor_img.size, 4, cursor_img.tobytes())
+
     def update(self, hands_data) -> list[str]:
         """
         Checks if any index finger tip is hovering over a button.
@@ -103,14 +114,14 @@ class UIRenderer:
         triggered_events = []
         
         # Get all index finger positions (NDC)
-        pointers = []
+        self.pointers = []
         if hands_data:
             for hand in hands_data:
-                pointers.append(hand[8]) # Index finger tip
+                self.pointers.append(hand[8]) # Index finger tip
                 
         for btn in self.buttons:
             is_hovered = False
-            for p in pointers:
+            for p in self.pointers:
                 # Check AABB with slightly larger bounds for easier clicking
                 bx, by = btn["pos"]
                 bw, bh = btn["size"]
@@ -142,6 +153,10 @@ class UIRenderer:
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.DEFAULT_BLENDING
         
+        # Render buttons
+        if 'use_texture' in self.prog:
+            self.prog['use_texture'].value = True
+            
         for btn in self.buttons:
             self.prog['rect_pos'].value = btn["pos"]
             self.prog['rect_size'].value = btn["size"]
@@ -160,4 +175,18 @@ class UIRenderer:
             if 'text_texture' in self.prog:
                 self.prog['text_texture'].value = 0
                 
+            self.vao.render(moderngl.TRIANGLE_STRIP)
+
+        # Render pointers (cursors)
+        if 'use_texture' in self.prog:
+            self.prog['use_texture'].value = True
+            
+        self.prog['rect_color'].value = (1.0, 1.0, 1.0, 0.9)
+        self.cursor_texture.use(0)
+        if 'text_texture' in self.prog:
+            self.prog['text_texture'].value = 0
+            
+        for p in self.pointers:
+            self.prog['rect_pos'].value = tuple(p)
+            self.prog['rect_size'].value = (0.02, 0.02 * (1280/720)) # approximate square aspect ratio compensation
             self.vao.render(moderngl.TRIANGLE_STRIP)

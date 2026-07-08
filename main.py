@@ -122,6 +122,8 @@ def main():
                             logger.info(f"UI Toggle -> Color theme changed to {current_theme}")
                         elif event == "wet":
                             wet_screen_mode = not wet_screen_mode
+                            if not wet_screen_mode:
+                                wet_screen.clear() # clear the canvas when toggled off
                             logger.info(f"UI Toggle -> Wet screen mode: {wet_screen_mode}")
                 
                 # Optional: log if we have landmarks in debug mode (once per second to avoid spam)
@@ -184,13 +186,14 @@ def main():
                 
                 # Wet screen interaction
                 if wet_screen_mode:
-                    wet_screen.fade() # slowly fade out previous drawings
                     if tracked_data and tracked_data.get('hands'):
                         brush_pts = []
                         for hand in tracked_data['hands']:
                             # Index finger tip is index 8
                             brush_pts.append(hand[8])
                         wet_screen.draw(brush_pts)
+                    else:
+                        wet_screen.draw([]) # pass empty list to clear prev_positions
                 
             # Render Pass
             post_processor.begin()
@@ -204,17 +207,16 @@ def main():
             # First, check if we need to draw background
             window.ctx.screen.use()
             if show_camera_bg and camera_texture is not None:
-                post_processor.draw_camera(camera_texture, window.ctx.screen)
+                if wet_screen_mode:
+                    wet_screen.render_foggy_mirror(camera_texture, window.ctx.screen)
+                else:
+                    post_processor.draw_camera(camera_texture, window.ctx.screen)
             else:
                 window.ctx.screen.clear(0.05, 0.05, 0.05, 1.0)
                 
             # Now composite particles
             post_processor.end(window.ctx.screen)
             
-            # 3. Wet Screen Canvas (over screen)
-            if wet_screen_mode:
-                wet_screen.render()
-                
             # 4. Render UI over everything
             ui_renderer.render()
 

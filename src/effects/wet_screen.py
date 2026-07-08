@@ -9,6 +9,8 @@ class WetScreenRenderer:
         self.width = width
         self.height = height
         
+        self.prev_positions = None
+        
         self._load_shaders()
         self._create_quad()
         self._create_fbos(width, height)
@@ -32,15 +34,11 @@ class WetScreenRenderer:
             
         self.quad_prog = self.ctx.program(vertex_shader=quad_vert, fragment_shader=quad_frag)
         
-        # Simple fade shader
-        fade_frag = """
-        #version 330
-        out vec4 fragColor;
-        void main() {
-            fragColor = vec4(0.0, 0.0, 0.0, 0.02); // Small opacity to slowly fade
-        }
-        """
-        self.fade_prog = self.ctx.program(vertex_shader=quad_vert, fragment_shader=fade_frag)
+        # Foggy Mirror shader
+        with open(base_path / 'foggy_mirror.frag', 'r') as f:
+            foggy_frag = f.read()
+            
+        self.foggy_prog = self.ctx.program(vertex_shader=quad_vert, fragment_shader=foggy_frag)
 
     def _create_quad(self):
         vertices = np.array([
@@ -51,13 +49,10 @@ class WetScreenRenderer:
         ], dtype='f4')
         self.vbo = self.ctx.buffer(vertices.tobytes())
         self.quad_vao = self.ctx.vertex_array(self.quad_prog, [(self.vbo, '2f 2f', 'in_position', 'in_texcoord')])
+        self.foggy_vao = self.ctx.vertex_array(self.foggy_prog, [(self.vbo, '2f 2f', 'in_position', 'in_texcoord')])
         
-        # 'in_texcoord' is optimized out in fade_prog because the fragment shader doesn't use it.
-        # So we skip the texcoord bytes (8 bytes) and only bind 'in_position'.
-        self.fade_vao = self.ctx.vertex_array(self.fade_prog, [(self.vbo, '2f 8x', 'in_position')])
-        
-        # A dynamic VBO for brush strokes (up to max hands)
-        self.brush_vbo = self.ctx.buffer(reserve=10 * 8) # 10 points max, 2 floats each
+        # A dynamic VBO for brush strokes. We use a larger buffer to hold interpolated points
+        self.brush_vbo = self.ctx.buffer(reserve=4096 * 8) # Up to 4096 points per frame
         self.brush_vao = self.ctx.vertex_array(self.brush_prog, [(self.brush_vbo, '2f', 'in_position')])
 
     def _create_fbos(self, width: int, height: int):
@@ -79,39 +74,56 @@ class WetScreenRenderer:
     def draw(self, positions: list[np.ndarray]):
         """Draws brush strokes at the given NDC positions onto the persistent canvas."""
         if not positions:
+            self.prev_positions = None
             return
+            
+        # Interpolate points between previous and current positions for a continuous line
+        points_to_draw = []
+        if self.prev_positions is not None and len(self.prev_positions) == len(positions):
+            for i in range(len(positions)):
+                p1 = self.prev_positions[i]
+                p2 = positions[i]
+                dist = np.linalg.norm(p2 - p1)
+                num_steps = max(1, int(dist * 100)) # roughly a point every 0.01 NDC units
+                for t in np.linspace(0, 1, num_steps):
+                    points_to_draw.append(p1 * (1 - t) + p2 * t)
+        else:
+            points_to_draw = positions
+            
+        self.prev_positions = positions
             
         self.fbo.use()
         
         # Write points to brush VBO
-        data = np.array(positions, dtype='f4').tobytes()
-        self.brush_vbo.write(data)
-        
-        # Setup blending for drawing the brush
-        self.ctx.enable(moderngl.PROGRAM_POINT_SIZE)
-        self.ctx.enable(moderngl.BLEND)
-        # Additive blending for the brush to make it glow
-        self.ctx.blend_func = moderngl.ADDITIVE_BLENDING
-        
-        self.brush_vao.render(moderngl.POINTS, vertices=len(positions))
+        data = np.array(points_to_draw, dtype='f4').tobytes()
+        # if too many points, truncate
+        if len(data) <= 4096 * 8:
+            self.brush_vbo.write(data)
+            
+            # Setup blending for drawing the brush
+            self.ctx.enable(moderngl.PROGRAM_POINT_SIZE)
+            self.ctx.enable(moderngl.BLEND)
+            # Additive blending for the brush to make it glow/opaque
+            self.ctx.blend_func = moderngl.ADDITIVE_BLENDING
+            
+            self.brush_vao.render(moderngl.POINTS, vertices=len(points_to_draw))
 
-    def fade(self):
-        """Slowly fades out the drawn canvas."""
+    def clear(self):
+        """Clears the drawn canvas."""
         self.fbo.use()
-        self.ctx.enable(moderngl.BLEND)
-        # Subtract alpha or blend a dark transparent rect over it
-        self.ctx.blend_func = moderngl.DEFAULT_BLENDING
-        
-        # Ensure we can write to alpha
-        self.ctx.blend_equation = moderngl.FUNC_REVERSE_SUBTRACT
-        self.fade_vao.render(moderngl.TRIANGLE_STRIP)
-        self.ctx.blend_equation = moderngl.FUNC_ADD # reset
+        self.fbo.clear(0, 0, 0, 0)
+        self.prev_positions = None
 
-    def render(self):
-        """Composites the canvas onto the currently bound framebuffer."""
-        self.texture.use(0)
-        self.quad_prog['texture0'].value = 0
+    def render_foggy_mirror(self, camera_texture: moderngl.Texture, screen_fbo: moderngl.Framebuffer):
+        """Renders the foggy mirror effect directly to the screen."""
+        screen_fbo.use()
         
-        self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.DEFAULT_BLENDING
-        self.quad_vao.render(moderngl.TRIANGLE_STRIP)
+        camera_texture.use(0)
+        self.texture.use(1) # Mask texture
+        
+        self.foggy_prog['camera_texture'].value = 0
+        self.foggy_prog['mask_texture'].value = 1
+        self.foggy_prog['resolution'].value = (self.width, self.height)
+        
+        self.ctx.disable(moderngl.BLEND)
+        self.foggy_vao.render(moderngl.TRIANGLE_STRIP)
