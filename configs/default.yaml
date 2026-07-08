@@ -13,8 +13,8 @@ camera:
 
 tracker:
   max_faces: 1
-  min_detection_confidence: 0.5
-  min_tracking_confidence: 0.5
+  min_detection_confidence: 0.3
+  min_tracking_confidence: 0.3
   smoothing_factor: 0.5
   max_hands: 2
 

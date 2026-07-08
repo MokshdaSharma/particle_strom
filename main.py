@@ -9,6 +9,7 @@ from src.tracking.face_tracker import MotionTracker
 from src.particles.particle_engine import ParticleEngine
 from src.effects.post_processor import PostProcessor
 from src.effects.wet_screen import WetScreenRenderer
+from src.ui.ui_renderer import UIRenderer
 import glfw
 from PIL import Image
 import cv2
@@ -49,6 +50,9 @@ def main():
         
         # 8. Initialize Wet Screen Renderer
         wet_screen = WetScreenRenderer(window.ctx, config.app.window_width, config.app.window_height)
+        
+        # 9. Initialize UI Renderer
+        ui_renderer = UIRenderer(window.ctx)
         
         logger.info("Entering main loop")
         
@@ -105,6 +109,20 @@ def main():
                 
                 if tracked_data:
                     face_landmarks = tracked_data.get('face')
+                    
+                    # Update UI
+                    ui_events = ui_renderer.update(tracked_data.get('hands'))
+                    for event in ui_events:
+                        if event == "bg":
+                            show_camera_bg = not show_camera_bg
+                            logger.info(f"UI Toggle -> Camera background: {show_camera_bg}")
+                        elif event == "theme":
+                            current_theme = (current_theme + 1) % 3
+                            particle_engine.set_theme(current_theme)
+                            logger.info(f"UI Toggle -> Color theme changed to {current_theme}")
+                        elif event == "wet":
+                            wet_screen_mode = not wet_screen_mode
+                            logger.info(f"UI Toggle -> Wet screen mode: {wet_screen_mode}")
                 
                 # Optional: log if we have landmarks in debug mode (once per second to avoid spam)
                 if config.app.debug_mode and face_landmarks is not None and frames == 1:
@@ -152,14 +170,14 @@ def main():
                 
             # Update Particles
             if not is_paused:
-                # Combine face landmarks with hands for particle swarming if desired,
-                # or just use face. The original used everything, so let's combine them
-                # if we want particles to track hands too.
                 all_lms = []
                 if face_landmarks is not None:
                     all_lms.append(face_landmarks)
                 if tracked_data and tracked_data.get('hands'):
-                    all_lms.extend(tracked_data['hands'])
+                    # Repeat hand landmarks 15 times to increase density around hands
+                    for hand in tracked_data['hands']:
+                        for _ in range(15):
+                            all_lms.append(hand)
                     
                 combined_landmarks = np.concatenate(all_lms, axis=0) if all_lms else None
                 particle_engine.update(sim_dt, total_time, combined_landmarks)
@@ -177,18 +195,28 @@ def main():
             # Render Pass
             post_processor.begin()
             
-            # 1. Background
-            if show_camera_bg and camera_texture is not None:
-                post_processor.draw_background(camera_texture)
-                
-            # 2. Wet Screen Canvas
-            if wet_screen_mode:
-                wet_screen.render()
-            
-            # 3. Render Particles
+            # 1. Render Particles to base FBO
             particle_engine.render()
             
+            # 2. Composite everything to screen
+            # post_processor.end takes care of the screen clear and drawing camera background if provided
+            
+            # First, check if we need to draw background
+            window.ctx.screen.use()
+            if show_camera_bg and camera_texture is not None:
+                post_processor.draw_camera(camera_texture, window.ctx.screen)
+            else:
+                window.ctx.screen.clear(0.05, 0.05, 0.05, 1.0)
+                
+            # Now composite particles
             post_processor.end(window.ctx.screen)
+            
+            # 3. Wet Screen Canvas (over screen)
+            if wet_screen_mode:
+                wet_screen.render()
+                
+            # 4. Render UI over everything
+            ui_renderer.render()
 
             # Swap buffers and poll events
             window.swap_buffers()

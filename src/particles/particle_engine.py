@@ -70,7 +70,7 @@ class ParticleEngine:
         self.particle_buffer = self.ctx.buffer(initial_data.tobytes())
         # SSBO 1: Landmarks Buffer (Store tracked facial/hand points)
         # Reserve enough space for face (478) + hands (21 each) + overhead
-        self.max_landmarks = 1024
+        self.max_landmarks = 4096
         self.landmark_buffer = self.ctx.buffer(reserve=self.max_landmarks * 8) # 2 floats per landmark = 8 bytes
         
         # Set static uniforms

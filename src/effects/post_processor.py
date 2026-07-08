@@ -77,18 +77,17 @@ class PostProcessor:
     def begin(self):
         """Binds the base FBO so the scene renders into it."""
         self.base_fbo.use()
-        self.base_fbo.clear(0.05, 0.05, 0.05, 1.0)
+        # Clear to transparent so the background shows through
+        self.base_fbo.clear(0.0, 0.0, 0.0, 0.0)
         
-    def draw_background(self, texture: moderngl.Texture):
-        """Draws a texture as the background into the base FBO."""
-        # Ensure we are rendering into base_fbo
-        self.base_fbo.use()
+    def draw_camera(self, texture: moderngl.Texture, screen_fbo: moderngl.Framebuffer):
+        """Draws the crisp camera feed directly to the screen."""
+        screen_fbo.use()
+        screen_fbo.clear(0.05, 0.05, 0.05, 1.0) # Base clear color
         
-        # Bind the background texture
         texture.use(0)
         self.quad_prog['texture0'].value = 0
         
-        # Disable blending to overwrite the clear color
         self.ctx.disable(moderngl.BLEND)
         self.quad_vao.render(moderngl.TRIANGLE_STRIP)
 
@@ -129,7 +128,8 @@ class PostProcessor:
         
         # Final Pass: Bloom composite to Screen
         screen_fbo.use()
-        screen_fbo.clear(0.05, 0.05, 0.05, 1.0)
+        # We NO LONGER clear here, because if there's a camera background, it's already there!
+        # If there's NO background, we should clear in main.py before rendering particles.
         
         self.base_texture.use(0)
         self.blur_tex_1.use(1)
@@ -138,8 +138,9 @@ class PostProcessor:
         self.bloom_prog['blur_texture'].value = 1
         self.bloom_prog['bloom_intensity'].value = self.config.bloom_intensity
         
-        # We must use proper blending for final screen
+        # Additive blending so particles glow on top of the crisp background
         self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.DEFAULT_BLENDING
+        self.ctx.blend_func = moderngl.ADDITIVE_BLENDING
         
         self.bloom_vao.render(moderngl.TRIANGLE_STRIP)
+        self.ctx.blend_func = moderngl.DEFAULT_BLENDING # Reset
